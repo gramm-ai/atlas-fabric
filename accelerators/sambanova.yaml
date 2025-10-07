@@ -1,0 +1,61 @@
+description: "SambaNova DataScale/SNX performance model emphasizing efficient inference/training"
+match:
+  vendor: SambaNova
+best_for:
+  - inference at moderate batch sizes
+  - bf16 training with strong interconnect
+notes: "Tune 'fabric_factors.Vendor' if using proprietary fabric; adjust jitter for virtualization."
+compute:
+  base_tokens_per_accel: 950.0
+  factors:
+    training: 0.95
+    inference: 0.98
+  comm_penalty_coeff: 0.4
+utilization:
+  base: 0.56
+  knob_increments:
+    cuda_graphs: 0.08
+    gpudirect_rdma: 0.03
+    inference_bonus: 0.08
+  max: 0.9
+communication:
+  intensity:
+    base: 0.12
+    per_tp: 0.02
+    per_pp: 0.015
+    inference_scale: 0.65
+  fabric_factors:
+    IB: 1.0
+    RoCE: 1.12
+    Vendor: 1.03
+  jitter_per_sriov: 0.06
+  gpudirect_multiplier: 0.6
+  min_overhead: 0.02
+throughput:
+  overhead_weight: 8.5
+latency:
+  min_p50_ms: 5.0
+  base_p50_coeff: 1050.0
+  ttft_ratio: 0.7
+  tail:
+    p95_multiplier: 1.55
+    p99_multiplier: 2.25
+    sriov_tail: 0.22
+    comm_tail: 0.85
+hbm:
+  base: 0.45
+  seq_scale: 0.35
+  seq_norm: 8192.0
+  max: 0.75
+memory:
+  peak_tokens_factor: 0.001
+noise:
+  amplitude: 0.03
+  tail_scale: 0.5
+retries:
+  overhead_threshold: 0.32
+
+power:
+  idle_fraction: 0.4
+  util_fraction: 0.6
+

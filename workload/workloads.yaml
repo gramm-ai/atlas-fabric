@@ -1,0 +1,99 @@
+- name: gpt5_1t_train
+  framework: pytorch
+  model_family: gpt
+  params:
+    hidden_size: 16384
+    n_layers: 160
+    vocab_size: 200000
+    n_heads: 128
+  parallelism:
+    tp: 8
+    pp: 8
+    dp: 16
+  sequence:
+    prompt: 32768
+    generate: 0
+  precision:
+    weights: fp8
+    activations: bf16
+  dataloader: streaming
+  optimizer:
+    type: fused_adam
+    grad_clip_norm: 1.0
+  duration_minutes: 5
+  track: parity
+  notes: "Representative GPT-5 scale pretraining step"
+  runtime_tuning:
+    microbatch: 2
+    cuda_graphs: true
+    gpudirect_rdma: true
+    virt: bare
+    fabric: IB
+  schedule:
+    phases:
+      - name: warmup
+        duration_minutes: 20
+        tokens_scale: 0.4
+        overrides:
+          precision:
+            weights: bf16
+            activations: bf16
+      - name: main_run
+        duration_minutes: 160
+        tokens_scale: 1.0
+      - name: finetune
+        duration_minutes: 40
+        tokens_scale: 0.6
+        overrides:
+          sequence:
+            prompt: 16384
+            generate: 0
+          optimizer:
+            grad_clip_norm: 0.7
+
+- name: gpt5_1t_inference
+  framework: pytorch
+  model_family: gpt
+  params:
+    hidden_size: 12288
+    n_layers: 96
+    vocab_size: 200000
+    n_heads: 96
+  parallelism:
+    tp: 4
+    pp: 4
+    dp: 8
+  sequence:
+    prompt: 4096
+    generate: 4096
+  precision:
+    weights: fp8
+    activations: bf16
+  dataloader: synthetic
+  duration_minutes: 5
+  track: parity
+  notes: "GPT-5 scale inference decode with autoregressive generation"
+  runtime_tuning:
+    microbatch: 1
+    cuda_graphs: true
+    gpudirect_rdma: true
+    virt: bare
+    fabric: RoCE
+  schedule:
+    phases:
+      - name: steady_state
+        duration_minutes: 60
+        request_profile: peak
+        autoscale_factor: 1.0
+      - name: surge
+        duration_minutes: 30
+        request_profile: spike
+        autoscale_factor: 1.4
+        overrides:
+          parallelism:
+            dp: 12
+      - name: off_peak
+        duration_minutes: 90
+        request_profile: low
+        autoscale_factor: 0.5
+

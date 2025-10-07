@@ -1,0 +1,62 @@
+description: "NVIDIA GPU family performance model tuned for H100/A100/L40S generation"
+match:
+  vendor: NVIDIA
+best_for:
+  - training throughput (bf16/fp16)
+  - inference throughput with CUDA Graphs
+  - multi-node HPC with InfiniBand
+notes: "Assumes recent CUDA stack; adjust gpudirect and fabric factors if on cloud PCIe."
+compute:
+  base_tokens_per_accel: 1100.0
+  factors:
+    training: 1.0
+    inference: 1.05
+  comm_penalty_coeff: 0.4
+utilization:
+  base: 0.58
+  knob_increments:
+    cuda_graphs: 0.12
+    gpudirect_rdma: 0.05
+    inference_bonus: 0.1
+  max: 0.92
+communication:
+  intensity:
+    base: 0.11
+    per_tp: 0.02
+    per_pp: 0.015
+    inference_scale: 0.6
+  fabric_factors:
+    IB: 1.0
+    RoCE: 1.1
+    Vendor: 1.05
+  jitter_per_sriov: 0.05
+  gpudirect_multiplier: 0.45
+  min_overhead: 0.02
+throughput:
+  overhead_weight: 7.5
+latency:
+  min_p50_ms: 4.0
+  base_p50_coeff: 900.0
+  ttft_ratio: 0.7
+  tail:
+    p95_multiplier: 1.45
+    p99_multiplier: 2.1
+    sriov_tail: 0.18
+    comm_tail: 0.75
+hbm:
+  base: 0.4
+  seq_scale: 0.45
+  seq_norm: 8192.0
+  max: 0.82
+memory:
+  peak_tokens_factor: 0.001
+noise:
+  amplitude: 0.025
+  tail_scale: 0.5
+retries:
+  overhead_threshold: 0.28
+
+power:
+  idle_fraction: 0.4
+  util_fraction: 0.6
+

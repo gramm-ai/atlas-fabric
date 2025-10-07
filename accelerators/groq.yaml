@@ -1,0 +1,61 @@
+description: "Groq LPU performance model optimized for ultra-low-latency decode"
+match:
+  vendor: Groq
+best_for:
+  - real-time inference (small batch)
+  - latency-sensitive applications
+notes: "Limited CUDA Graphs effect; leverage inference bonus and lower comm intensity."
+compute:
+  base_tokens_per_accel: 1200.0
+  factors:
+    training: 0.6
+    inference: 1.2
+  comm_penalty_coeff: 0.4
+utilization:
+  base: 0.6
+  knob_increments:
+    cuda_graphs: 0.0
+    gpudirect_rdma: 0.02
+    inference_bonus: 0.15
+  max: 0.93
+communication:
+  intensity:
+    base: 0.10
+    per_tp: 0.015
+    per_pp: 0.01
+    inference_scale: 0.55
+  fabric_factors:
+    IB: 1.0
+    RoCE: 1.08
+    Vendor: 1.02
+  jitter_per_sriov: 0.04
+  gpudirect_multiplier: 0.55
+  min_overhead: 0.015
+throughput:
+  overhead_weight: 7.0
+latency:
+  min_p50_ms: 3.0
+  base_p50_coeff: 800.0
+  ttft_ratio: 0.7
+  tail:
+    p95_multiplier: 1.4
+    p99_multiplier: 2.0
+    sriov_tail: 0.15
+    comm_tail: 0.7
+hbm:
+  base: 0.35
+  seq_scale: 0.3
+  seq_norm: 8192.0
+  max: 0.65
+memory:
+  peak_tokens_factor: 0.001
+noise:
+  amplitude: 0.02
+  tail_scale: 0.5
+retries:
+  overhead_threshold: 0.27
+
+power:
+  idle_fraction: 0.4
+  util_fraction: 0.6
+
