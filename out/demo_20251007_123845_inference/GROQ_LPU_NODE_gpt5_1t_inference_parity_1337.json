@@ -1,0 +1,315 @@
+{
+  "dollar_per_1k_tokens": 0.004322225666630052,
+  "knobs": {
+    "cuda_graphs": true,
+    "fabric": "RoCE",
+    "gpudirect_rdma": true,
+    "microbatch": 1,
+    "virt": "bare"
+  },
+  "label": "pre-opt",
+  "record": {
+    "artifacts": {
+      "env": "sim://manifest",
+      "logs": "sim://logs",
+      "trace": "sim://trace"
+    },
+    "comm_compute_ratio": 0.05408057814595065,
+    "failures": 0,
+    "flop_utilization": 0.75239087,
+    "hbm_bw_util": 0.6499999999999998,
+    "node_power_w": 2815.866666666667,
+    "p50_ms": 3.0862191390388465,
+    "p95_ms": 4.504591817983406,
+    "p99_ms": 6.422814148685031,
+    "peak_mem_gb": 80.0,
+    "queue_arrival_rate_rps": 0.2530927953471356,
+    "queue_latency_ms": {
+      "p50": 3.0862191390388465,
+      "p95": 4.504591817983406,
+      "p99": 6.422814148685031,
+      "ttft": 2.186219139038846
+    },
+    "queue_servers": 8.666666666666666,
+    "queue_utilization": 0.07429166666666667,
+    "queue_wait_fraction_p99": 0.02583694958961672,
+    "queue_wait_ms": {
+      "p50": 0.08621913903884638,
+      "p95": 0.12932870855826958,
+      "p99": 0.17243827807769277,
+      "ttft": 0.08621913903884638
+    },
+    "retries": 0,
+    "schedule_breakdown": [
+      {
+        "name": "steady_state",
+        "overrides": {},
+        "record": {
+          "artifacts": {
+            "env": "sim://manifest",
+            "logs": "sim://logs",
+            "trace": "sim://trace"
+          },
+          "comm_compute_ratio": 0.05408057814595065,
+          "failures": 0,
+          "flop_utilization": 0.75239087,
+          "hbm_bw_util": 0.6499999999999999,
+          "node_power_w": 3448.0,
+          "p50_ms": 3.0,
+          "p95_ms": 4.3732306974132555,
+          "p99_ms": 6.247472424876079,
+          "peak_mem_gb": 80.0,
+          "queue_adjusted": {
+            "p50_ms": 3.234902543148327,
+            "p95_ms": 4.725584512135746,
+            "p99_ms": 6.717277511172734,
+            "ttft_ms": 2.334902543148327,
+            "waiting_fraction_p99": 0.06993980604720221
+          },
+          "queue_metrics": {
+            "arrival_cv": 1.1,
+            "arrival_rate": 0.329436243382535,
+            "p50_latency_ms": 3.234902543148327,
+            "p95_latency_ms": 4.725584512135746,
+            "p99_latency_ms": 6.717277511172734,
+            "servers": 8,
+            "service_cv": 1.1,
+            "service_mean_ms": 2580.1654100729784,
+            "ttft_latency_ms": 2.334902543148327,
+            "utilization": 0.10625,
+            "wait_p50_ms": 0.2349025431483271,
+            "wait_p95_ms": 0.3523538147224906,
+            "wait_p99_ms": 0.4698050862966542,
+            "wait_ttft_ms": 0.2349025431483271,
+            "waiting_fraction_p99": 0.06993980604720221
+          },
+          "retries": 0,
+          "step_time_ms": 0.0,
+          "tokens_per_sec": 3174.9902421055613,
+          "ttft_ms": 2.0999999999999996
+        },
+        "settings": {
+          "autoscale_factor": 1.0,
+          "request_profile": "peak",
+          "tokens_scale": null
+        },
+        "weight_minutes": 60.0
+      },
+      {
+        "name": "surge",
+        "overrides": {
+          "parallelism": {
+            "dp": 12
+          }
+        },
+        "record": {
+          "artifacts": {
+            "env": "sim://manifest",
+            "logs": "sim://logs",
+            "trace": "sim://trace"
+          },
+          "comm_compute_ratio": 0.05408057814595065,
+          "failures": 0,
+          "flop_utilization": 0.75239087,
+          "hbm_bw_util": 0.6499999999999999,
+          "node_power_w": 4827.2,
+          "p50_ms": 3.0,
+          "p95_ms": 4.384120106393837,
+          "p99_ms": 6.263028723419768,
+          "peak_mem_gb": 80.0,
+          "queue_adjusted": {
+            "p50_ms": 3.008129713238251,
+            "p95_ms": 4.3963146762512135,
+            "p99_ms": 6.27928814989627,
+            "ttft_ms": 2.1081297132382506,
+            "waiting_fraction_p99": 0.002589374159676116
+          },
+          "queue_metrics": {
+            "arrival_cv": 1.3,
+            "arrival_rate": 0.6270948452160516,
+            "p50_latency_ms": 3.008129713238251,
+            "p95_latency_ms": 4.3963146762512135,
+            "p99_latency_ms": 6.27928814989627,
+            "servers": 12,
+            "service_cv": 1.3,
+            "service_mean_ms": 1833.8533776398576,
+            "ttft_latency_ms": 2.1081297132382506,
+            "utilization": 0.08325,
+            "wait_p50_ms": 0.008129713238250923,
+            "wait_p95_ms": 0.012194569857376384,
+            "wait_p99_ms": 0.016259426476501845,
+            "wait_ttft_ms": 0.008129713238250923,
+            "waiting_fraction_p99": 0.002589374159676116
+          },
+          "retries": 0,
+          "step_time_ms": 0.0,
+          "tokens_per_sec": 4467.096497399909,
+          "ttft_ms": 2.0999999999999996
+        },
+        "settings": {
+          "autoscale_factor": 1.4,
+          "request_profile": "spike",
+          "tokens_scale": null
+        },
+        "weight_minutes": 30.0
+      },
+      {
+        "name": "off_peak",
+        "overrides": {},
+        "record": {
+          "artifacts": {
+            "env": "sim://manifest",
+            "logs": "sim://logs",
+            "trace": "sim://trace"
+          },
+          "comm_compute_ratio": 0.05408057814595065,
+          "failures": 0,
+          "flop_utilization": 0.75239087,
+          "hbm_bw_util": 0.6499999999999999,
+          "node_power_w": 1724.0,
+          "p50_ms": 3.0,
+          "p95_ms": 4.373665718443491,
+          "p99_ms": 6.248093883490702,
+          "peak_mem_gb": 80.0,
+          "queue_adjusted": {
+            "p50_ms": 3.0131266782327244,
+            "p95_ms": 4.393355735792578,
+            "p99_ms": 6.274347239956151,
+            "ttft_ms": 2.113126678232724,
+            "waiting_fraction_p99": 0.004184237094539938
+          },
+          "queue_metrics": {
+            "arrival_cv": 0.8,
+            "arrival_rate": 0.07752981336723057,
+            "p50_latency_ms": 3.0131266782327244,
+            "p95_latency_ms": 4.393355735792578,
+            "p99_latency_ms": 6.274347239956151,
+            "servers": 8,
+            "service_cv": 0.8,
+            "service_mean_ms": 5159.305596485126,
+            "ttft_latency_ms": 2.113126678232724,
+            "utilization": 0.05000000000000001,
+            "wait_p50_ms": 0.013126678232724402,
+            "wait_p95_ms": 0.019690017349086604,
+            "wait_p99_ms": 0.026253356465448803,
+            "wait_ttft_ms": 0.013126678232724402,
+            "waiting_fraction_p99": 0.004184237094539938
+          },
+          "retries": 0,
+          "step_time_ms": 0.0,
+          "tokens_per_sec": 1587.8105777608819,
+          "ttft_ms": 2.0999999999999996
+        },
+        "settings": {
+          "autoscale_factor": 0.5,
+          "request_profile": "low",
+          "tokens_scale": null
+        },
+        "weight_minutes": 90.0
+      }
+    ],
+    "schedule_effects": true,
+    "schedule_total_minutes": 180.0,
+    "service_latency_ms": {
+      "p50": 3.0,
+      "p95": 4.375263109425138,
+      "p99": 6.250375870607339,
+      "ttft": 2.099999999999999
+    },
+    "step_time_ms": 0.0,
+    "tokens_per_sec": 2596.7514524822795,
+    "ttft_ms": 2.186219139038846
+  },
+  "target": {
+    "accelerators_per_node": 8,
+    "collectives": [
+      "allgather"
+    ],
+    "container_base": "ghcr.io/org/groq:stable",
+    "cost": {
+      "energy_watts_node": 4000,
+      "hourly_usd": 40.0,
+      "pue": 1.2
+    },
+    "host_cpu_arch": "x86",
+    "instance_type": "LPU.X",
+    "interconnect": {
+      "bw_GBps": 800,
+      "type": "Fabric"
+    },
+    "max_batch_tokens": 32768,
+    "memory_gb_per_accel": 80,
+    "name": "GROQ_LPU_NODE",
+    "notes": "Power provisional: ~4kW per 8-card node (third-party reports). Hourly set to 0 to avoid double-counting; simulator adds energy via power and PUE.",
+    "num_nodes": 1,
+    "numeric": [
+      "fp16",
+      "int8"
+    ],
+    "vendor": "Groq"
+  },
+  "track": "parity",
+  "ts": "2025-10-07T12:38:49",
+  "workload": {
+    "dataloader": "synthetic",
+    "duration_minutes": 5,
+    "framework": "pytorch",
+    "model_family": "gpt",
+    "name": "gpt5_1t_inference",
+    "notes": "GPT-5 scale inference decode with autoregressive generation",
+    "parallelism": {
+      "dp": 8,
+      "pp": 4,
+      "tp": 4
+    },
+    "params": {
+      "hidden_size": 12288,
+      "n_heads": 96,
+      "n_layers": 96,
+      "vocab_size": 200000
+    },
+    "precision": {
+      "activations": "bf16",
+      "weights": "fp8"
+    },
+    "runtime_tuning": {
+      "cuda_graphs": true,
+      "fabric": "RoCE",
+      "gpudirect_rdma": true,
+      "microbatch": 1,
+      "virt": "bare"
+    },
+    "schedule": {
+      "phases": [
+        {
+          "autoscale_factor": 1.0,
+          "duration_minutes": 60,
+          "name": "steady_state",
+          "request_profile": "peak"
+        },
+        {
+          "autoscale_factor": 1.4,
+          "duration_minutes": 30,
+          "name": "surge",
+          "overrides": {
+            "parallelism": {
+              "dp": 12
+            }
+          },
+          "request_profile": "spike"
+        },
+        {
+          "autoscale_factor": 0.5,
+          "duration_minutes": 90,
+          "name": "off_peak",
+          "request_profile": "low"
+        }
+      ]
+    },
+    "sequence": {
+      "generate": 4096,
+      "prompt": 4096
+    },
+    "track": "parity"
+  }
+}

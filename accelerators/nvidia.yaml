@@ -1,6 +1,7 @@
 description: "NVIDIA GPU family performance model tuned for H100/A100/L40S generation"
 match:
   vendor: NVIDIA
+  name: NVIDIA_H100_8x_NVLink
 best_for:
   - training throughput (bf16/fp16)
   - inference throughput with CUDA Graphs
@@ -29,6 +30,7 @@ communication:
     IB: 1.0
     RoCE: 1.1
     Vendor: 1.05
+    NVLink: 1.0
   jitter_per_sriov: 0.05
   gpudirect_multiplier: 0.45
   min_overhead: 0.02

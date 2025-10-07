@@ -1,0 +1,123 @@
+{
+  "dollar_per_1k_tokens": 0.0035472595725299736,
+  "knobs": {
+    "cuda_graphs": true,
+    "fabric": "RoCE",
+    "gpudirect_rdma": true,
+    "microbatch": 1,
+    "virt": "bare"
+  },
+  "label": "post-opt",
+  "record": {
+    "artifacts": {
+      "env": "sim://manifest",
+      "logs": "sim://logs",
+      "trace": "sim://trace"
+    },
+    "comm_compute_ratio": 0.05408057814595065,
+    "failures": 0,
+    "flop_utilization": 0.75239087,
+    "hbm_bw_util": 0.6499999999999999,
+    "node_power_w": 3448.0,
+    "p50_ms": 3.0,
+    "p95_ms": 4.370609815129058,
+    "p99_ms": 6.243728307327227,
+    "peak_mem_gb": 80.0,
+    "retries": 0,
+    "step_time_ms": 0.0,
+    "tokens_per_sec": 3171.189161972741,
+    "ttft_ms": 2.0999999999999996
+  },
+  "target": {
+    "accelerators_per_node": 8,
+    "collectives": [
+      "allgather"
+    ],
+    "container_base": "ghcr.io/org/groq:stable",
+    "cost": {
+      "energy_watts_node": 4000,
+      "hourly_usd": 40.0,
+      "pue": 1.2
+    },
+    "host_cpu_arch": "x86",
+    "instance_type": "LPU.X",
+    "interconnect": {
+      "bw_GBps": 800,
+      "type": "Fabric"
+    },
+    "max_batch_tokens": 32768,
+    "memory_gb_per_accel": 80,
+    "name": "GROQ_LPU_NODE",
+    "notes": "Power provisional: ~4kW per 8-card node (third-party reports). Hourly set to 0 to avoid double-counting; simulator adds energy via power and PUE.",
+    "num_nodes": 1,
+    "numeric": [
+      "fp16",
+      "int8"
+    ],
+    "vendor": "Groq"
+  },
+  "track": "parity",
+  "ts": "2025-10-07T12:38:50",
+  "workload": {
+    "dataloader": "synthetic",
+    "duration_minutes": 5,
+    "framework": "pytorch",
+    "model_family": "gpt",
+    "name": "gpt5_1t_inference",
+    "notes": "GPT-5 scale inference decode with autoregressive generation",
+    "parallelism": {
+      "dp": 8,
+      "pp": 4,
+      "tp": 4
+    },
+    "params": {
+      "hidden_size": 12288,
+      "n_heads": 96,
+      "n_layers": 96,
+      "vocab_size": 200000
+    },
+    "precision": {
+      "activations": "bf16",
+      "weights": "fp8"
+    },
+    "runtime_tuning": {
+      "cuda_graphs": true,
+      "fabric": "RoCE",
+      "gpudirect_rdma": true,
+      "microbatch": 1,
+      "virt": "bare"
+    },
+    "schedule": {
+      "phases": [
+        {
+          "autoscale_factor": 1.0,
+          "duration_minutes": 60,
+          "name": "steady_state",
+          "request_profile": "peak"
+        },
+        {
+          "autoscale_factor": 1.4,
+          "duration_minutes": 30,
+          "name": "surge",
+          "overrides": {
+            "parallelism": {
+              "dp": 12
+            }
+          },
+          "request_profile": "spike"
+        },
+        {
+          "autoscale_factor": 0.5,
+          "duration_minutes": 90,
+          "name": "off_peak",
+          "request_profile": "low"
+        }
+      ]
+    },
+    "sequence": {
+      "generate": 4096,
+      "prompt": 4096
+    },
+    "track": "parity"
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "dollar_per_1k_tokens": 0.007372943145044449,
+  "knobs": {
+    "cuda_graphs": true,
+    "fabric": "IB",
+    "gpudirect_rdma": true,
+    "microbatch": 2,
+    "virt": "bare"
+  },
+  "label": "pre-opt",
+  "record": {
+    "artifacts": {
+      "env": "sim://manifest",
+      "logs": "sim://logs",
+      "trace": "sim://trace"
+    },
+    "comm_compute_ratio": 0.13137893593919653,
+    "failures": 0,
+    "flop_utilization": 0.58249,
+    "hbm_bw_util": 0.65,
+    "node_power_w": 3088.0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0,
+    "peak_mem_gb": 80.0,
+    "queue_arrival_rate_rps": 0.0,
+    "queue_latency_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "ttft": 0.0
+    },
+    "queue_servers": 0.0,
+    "queue_utilization": 0.0,
+    "queue_wait_fraction_p99": 0.0,
+    "queue_wait_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "ttft": 0.0
+    },
+    "retries": 0,
+    "schedule_breakdown": [
+      {
+        "name": "warmup",
+        "overrides": {
+          "precision": {
+            "activations": "bf16",
+            "weights": "bf16"
+          }
+        },
+        "record": {
+          "artifacts": {
+            "env": "sim://manifest",
+            "logs": "sim://logs",
+            "trace": "sim://trace"
+          },
+          "comm_compute_ratio": 0.13137893593919653,
+          "failures": 0,
+          "flop_utilization": 0.58249,
+          "hbm_bw_util": 0.65,
+          "node_power_w": 3088.0,
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 0.0,
+          "peak_mem_gb": 80.0,
+          "retries": 0,
+          "step_time_ms": 1507675.1453372492,
+          "tokens_per_sec": 695.4919985534722,
+          "ttft_ms": 0.0
+        },
+        "settings": {
+          "autoscale_factor": null,
+          "request_profile": null,
+          "tokens_scale": 0.4
+        },
+        "weight_minutes": 20.0
+      },
+      {
+        "name": "main_run",
+        "overrides": {},
+        "record": {
+          "artifacts": {
+            "env": "sim://manifest",
+            "logs": "sim://logs",
+            "trace": "sim://trace"
+          },
+          "comm_compute_ratio": 0.13137893593919653,
+          "failures": 0,
+          "flop_utilization": 0.58249,
+          "hbm_bw_util": 0.65,
+          "node_power_w": 3088.0,
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 0.0,
+          "peak_mem_gb": 80.0,
+          "retries": 0,
+          "step_time_ms": 600085.1271957863,
+          "tokens_per_sec": 1747.378750911597,
+          "ttft_ms": 0.0
+        },
+        "settings": {
+          "autoscale_factor": null,
+          "request_profile": null,
+          "tokens_scale": 1.0
+        },
+        "weight_minutes": 160.0
+      },
+      {
+        "name": "finetune",
+        "overrides": {
+          "optimizer": {
+            "grad_clip_norm": 0.7
+          },
+          "sequence": {
+            "generate": 0,
+            "prompt": 16384
+          }
+        },
+        "record": {
+          "artifacts": {
+            "env": "sim://manifest",
+            "logs": "sim://logs",
+            "trace": "sim://trace"
+          },
+          "comm_compute_ratio": 0.13137893593919653,
+          "failures": 0,
+          "flop_utilization": 0.58249,
+          "hbm_bw_util": 0.65,
+          "node_power_w": 3088.0,
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 0.0,
+          "peak_mem_gb": 80.0,
+          "retries": 0,
+          "step_time_ms": 502458.53648584394,
+          "tokens_per_sec": 1043.4453033017005,
+          "ttft_ms": 0.0
+        },
+        "settings": {
+          "autoscale_factor": null,
+          "request_profile": null,
+          "tokens_scale": 0.6
+        },
+        "weight_minutes": 40.0
+      }
+    ],
+    "schedule_effects": true,
+    "schedule_total_minutes": 220.0,
+    "service_latency_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "ttft": 0.0
+    },
+    "step_time_ms": 664843.0214432025,
+    "tokens_per_sec": 1523.764782949968,
+    "ttft_ms": 0.0
+  },
+  "target": {
+    "accelerators_per_node": 8,
+    "collectives": [
+      "allgather"
+    ],
+    "container_base": "ghcr.io/org/groq:stable",
+    "cost": {
+      "energy_watts_node": 4000,
+      "hourly_usd": 40.0,
+      "pue": 1.2
+    },
+    "host_cpu_arch": "x86",
+    "instance_type": "LPU.X",
+    "interconnect": {
+      "bw_GBps": 800,
+      "type": "Fabric"
+    },
+    "max_batch_tokens": 32768,
+    "memory_gb_per_accel": 80,
+    "name": "GROQ_LPU_NODE",
+    "notes": "Power provisional: ~4kW per 8-card node (third-party reports). Hourly set to 0 to avoid double-counting; simulator adds energy via power and PUE.",
+    "num_nodes": 1,
+    "numeric": [
+      "fp16",
+      "int8"
+    ],
+    "vendor": "Groq"
+  },
+  "track": "parity",
+  "ts": "2025-10-07T12:38:36",
+  "workload": {
+    "dataloader": "streaming",
+    "duration_minutes": 5,
+    "framework": "pytorch",
+    "model_family": "gpt",
+    "name": "gpt5_1t_train",
+    "notes": "Representative GPT-5 scale pretraining step",
+    "optimizer": {
+      "grad_clip_norm": 1.0,
+      "type": "fused_adam"
+    },
+    "parallelism": {
+      "dp": 16,
+      "pp": 8,
+      "tp": 8
+    },
+    "params": {
+      "hidden_size": 16384,
+      "n_heads": 128,
+      "n_layers": 160,
+      "vocab_size": 200000
+    },
+    "precision": {
+      "activations": "bf16",
+      "weights": "fp8"
+    },
+    "runtime_tuning": {
+      "cuda_graphs": true,
+      "fabric": "IB",
+      "gpudirect_rdma": true,
+      "microbatch": 2,
+      "virt": "bare"
+    },
+    "schedule": {
+      "phases": [
+        {
+          "duration_minutes": 20,
+          "name": "warmup",
+          "overrides": {
+            "precision": {
+              "activations": "bf16",
+              "weights": "bf16"
+            }
+          },
+          "tokens_scale": 0.4
+        },
+        {
+          "duration_minutes": 160,
+          "name": "main_run",
+          "tokens_scale": 1.0
+        },
+        {
+          "duration_minutes": 40,
+          "name": "finetune",
+          "overrides": {
+            "optimizer": {
+              "grad_clip_norm": 0.7
+            },
+            "sequence": {
+              "generate": 0,
+              "prompt": 16384
+            }
+          },
+          "tokens_scale": 0.6
+        }
+      ]
+    },
+    "sequence": {
+      "generate": 0,
+      "prompt": 32768
+    },
+    "track": "parity"
+  }
+}

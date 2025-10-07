@@ -1,6 +1,7 @@
 description: "SambaNova DataScale/SNX performance model emphasizing efficient inference/training"
 match:
   vendor: SambaNova
+  name: SAMBANOVA_SNX_NODE
 best_for:
   - inference at moderate batch sizes
   - bf16 training with strong interconnect
@@ -28,6 +29,7 @@ communication:
     IB: 1.0
     RoCE: 1.12
     Vendor: 1.03
+    Fabric: 1.03
   jitter_per_sriov: 0.06
   gpudirect_multiplier: 0.6
   min_overhead: 0.02

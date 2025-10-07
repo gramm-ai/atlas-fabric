@@ -12,30 +12,251 @@ This guide provides detailed procedures for empirically measuring the parameters
 
 **What it measures**: Maximum tokens per second a single accelerator can process under ideal conditions.
 
+`B_base` represents the theoretical peak performance of a single accelerator when running in isolation, without any multi-device communication overhead. This parameter serves as the foundation for all throughput calculations in the model.
+
+**Why this matters**: 
+- Sets the upper bound for system performance
+- Used as the baseline for scaling calculations across multiple accelerators
+- Critical for accurate cost-per-token estimates
+- Determines the effectiveness of optimization parameters
+
 **Measurement Procedure**:
+
+**Step 1: Environment Setup**
 ```python
-# 1. Run single-GPU benchmark with optimal batch size
-# 2. Use a standard model (e.g., GPT-2 1.5B)
-# 3. Disable all multi-GPU communication
-# 4. Measure for different sequence lengths
+# Ensure clean, isolated environment
+import torch
+import time
+import psutil
 
-for batch_size in [1, 2, 4, 8, 16, 32, 64]:
-    for seq_length in [512, 1024, 2048, 4096]:
-        tokens_per_second = benchmark_single_gpu(
-            model="gpt2-1.5B",
-            batch_size=batch_size,
-            sequence_length=seq_length,
-            warmup_steps=10,
-            measure_steps=100
-        )
-        record_measurement(tokens_per_second)
-
-# B_base = maximum observed tokens_per_second
+def setup_clean_environment():
+    # Disable multi-GPU communication
+    torch.distributed.init_process_group(backend='nccl', world_size=1, rank=0)
+    
+    # Set optimal CUDA settings
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
+    
+    # Clear GPU memory
+    torch.cuda.empty_cache()
+    
+    # Verify single GPU usage
+    assert torch.cuda.device_count() == 1, "Must run on single GPU"
 ```
 
-**Validation**: 
+**Step 2: Comprehensive Benchmarking**
+```python
+def measure_base_throughput():
+    """
+    Measure B_base across different configurations to find optimal performance
+    """
+    results = {}
+    
+    # Test different model sizes (scales with your target workload)
+    models = {
+        "gpt2-1.5B": {"params": 1.5e9, "hidden_size": 1600},
+        "gpt2-6B": {"params": 6e9, "hidden_size": 4096},
+        "llama-7B": {"params": 7e9, "hidden_size": 4096}
+    }
+    
+    # Test different sequence lengths (critical for memory-bound workloads)
+    sequence_lengths = [512, 1024, 2048, 4096, 8192]
+    
+    # Test different batch sizes (find optimal GPU utilization)
+    batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128]
+    
+    for model_name, model_config in models.items():
+        for seq_len in sequence_lengths:
+            for batch_size in batch_sizes:
+                try:
+                    # Skip configurations that exceed memory
+                    if estimate_memory_usage(model_config, batch_size, seq_len) > get_gpu_memory():
+                        continue
+                        
+                    tokens_per_second = benchmark_single_gpu(
+                        model=model_name,
+                        batch_size=batch_size,
+                        sequence_length=seq_len,
+                        warmup_steps=20,  # Increased for stability
+                        measure_steps=200,  # More samples for accuracy
+                        precision="fp16"  # Match your target precision
+                    )
+                    
+                    results[f"{model_name}_{seq_len}_{batch_size}"] = {
+                        "tokens_per_second": tokens_per_second,
+                        "memory_usage": get_gpu_memory_usage(),
+                        "utilization": get_gpu_utilization()
+                    }
+                    
+                except torch.cuda.OutOfMemoryError:
+                    print(f"OOM: {model_name}, seq={seq_len}, batch={batch_size}")
+                    continue
+    
+    return results
+
+def benchmark_single_gpu(model, batch_size, sequence_length, warmup_steps, measure_steps, precision):
+    """
+    Core benchmarking function with proper timing and measurement
+    """
+    # Load model and data
+    model = load_model(model)
+    model = model.cuda()
+    
+    if precision == "fp16":
+        model = model.half()
+    
+    # Create synthetic data (eliminates I/O bottlenecks)
+    input_ids = torch.randint(0, model.config.vocab_size, 
+                             (batch_size, sequence_length)).cuda()
+    
+    if precision == "fp16":
+        input_ids = input_ids.half()
+    
+    # Warmup phase (critical for accurate measurement)
+    model.train()
+    for _ in range(warmup_steps):
+        with torch.cuda.amp.autocast(enabled=(precision=="fp16")):
+            outputs = model(input_ids)
+            loss = outputs.logits.mean()
+            loss.backward()
+        torch.cuda.synchronize()
+    
+    # Measurement phase
+    torch.cuda.synchronize()
+    start_time = time.time()
+    
+    for step in range(measure_steps):
+        with torch.cuda.amp.autocast(enabled=(precision=="fp16")):
+            outputs = model(input_ids)
+            loss = outputs.logits.mean()
+            loss.backward()
+        
+        # Synchronize every step for accurate timing
+        torch.cuda.synchronize()
+    
+    end_time = time.time()
+    
+    # Calculate tokens per second
+    total_tokens = batch_size * sequence_length * measure_steps
+    elapsed_time = end_time - start_time
+    tokens_per_second = total_tokens / elapsed_time
+    
+    return tokens_per_second
+```
+
+**Step 3: Analysis and Selection**
+```python
+def analyze_and_select_b_base(results):
+    """
+    Analyze results to select the optimal B_base value
+    """
+    # Filter for stable, high-performance configurations
+    stable_results = []
+    
+    for config, data in results.items():
+        # Only consider configurations with good GPU utilization
+        if data["utilization"] > 0.7:  # 70%+ GPU utilization
+            stable_results.append({
+                "config": config,
+                "tokens_per_second": data["tokens_per_second"],
+                "utilization": data["utilization"],
+                "memory_efficiency": data["memory_usage"] / get_gpu_memory()
+            })
+    
+    # Sort by tokens per second
+    stable_results.sort(key=lambda x: x["tokens_per_second"], reverse=True)
+    
+    # Select B_base as the maximum stable performance
+    b_base = stable_results[0]["tokens_per_second"]
+    
+    print(f"Selected B_base: {b_base:.2f} tokens/sec")
+    print(f"Configuration: {stable_results[0]['config']}")
+    print(f"GPU Utilization: {stable_results[0]['utilization']:.1%}")
+    
+    return b_base, stable_results[0]
+```
+
+**Step 4: Validation and Cross-Checking**
+```python
+def validate_b_base(b_base, hardware_specs):
+    """
+    Validate B_base against theoretical limits
+    """
+    # Calculate theoretical maximum based on hardware specs
+    peak_tflops = hardware_specs["peak_tflops"]
+    memory_bandwidth = hardware_specs["memory_bandwidth_gbps"]
+    
+    # Estimate theoretical token rate based on compute
+    # (This is a simplified calculation - actual depends on model architecture)
+    theoretical_max_tokens = estimate_theoretical_tokens_per_second(
+        peak_tflops, memory_bandwidth
+    )
+    
+    # B_base should be within reasonable range of theoretical maximum
+    efficiency = b_base / theoretical_max_tokens
+    
+    print(f"Theoretical maximum: {theoretical_max_tokens:.2f} tokens/sec")
+    print(f"Measured B_base: {b_base:.2f} tokens/sec")
+    print(f"Efficiency: {efficiency:.1%}")
+    
+    # Validation criteria
+    if efficiency < 0.3:
+        print("WARNING: B_base seems too low - check measurement setup")
+    elif efficiency > 0.9:
+        print("WARNING: B_base seems too high - verify measurement accuracy")
+    else:
+        print("✓ B_base validation passed")
+    
+    return efficiency
+```
+
+**Key Considerations**:
+
+1. **Model Selection**: Use models that match your target workload characteristics
+   - Model size (parameters, hidden dimensions)
+   - Architecture (transformer variants, attention patterns)
+   - Precision (FP16, FP32, mixed precision)
+
+2. **Sequence Length Impact**: 
+   - Longer sequences increase memory bandwidth requirements
+   - May hit memory limits before compute limits
+   - Test across your target sequence length range
+
+3. **Batch Size Optimization**:
+   - Larger batches improve GPU utilization
+   - Balance between memory usage and parallelism
+   - Find the "sweet spot" for your hardware
+
+4. **Precision Matching**:
+   - Use the same precision as your production workloads
+   - FP16 typically provides 1.5-2x speedup over FP32
+   - Mixed precision may have different characteristics
+
+5. **Measurement Stability**:
+   - Sufficient warmup steps (20+ recommended)
+   - Multiple measurement runs for consistency
+   - Monitor GPU utilization and memory usage
+   - Account for thermal throttling effects
+
+**Expected Values by Hardware**:
+- **NVIDIA H100**: 800-1200 tokens/sec (FP16, optimal batch size)
+- **NVIDIA A100**: 600-900 tokens/sec (FP16, optimal batch size)  
+- **NVIDIA V100**: 300-500 tokens/sec (FP16, optimal batch size)
+- **Groq LPU**: 2000-4000 tokens/sec (inference-optimized)
+- **SambaNova SNX**: 400-800 tokens/sec (training-optimized)
+
+**Common Pitfalls**:
+- **Insufficient warmup**: Leads to optimistic measurements
+- **I/O bottlenecks**: Use synthetic data, not real datasets
+- **Memory fragmentation**: Clear GPU memory between tests
+- **Thermal throttling**: Allow cooling between intensive tests
+- **Background processes**: Ensure clean, dedicated environment
+
+**Validation Criteria**:
 - Should be within 20% of theoretical peak (TFLOPS × model_efficiency)
 - Consistent across multiple runs (< 5% variance)
+- Stable across different sequence lengths (within 30% range)
+- Reasonable GPU utilization (>70% for compute-bound workloads)
 
 ### 1.2 Base Utilization (`rho_base`)
 

@@ -107,14 +107,96 @@ if is_infer:
 util = min(util, float(util_cfg["max"])
 ```
 
-**Communication intensity** measures how much data exchange is needed between accelerators. It scales with tensor (`tp`) and pipeline (`pp`) parallel degrees and is attenuated for inference workloads:
+
+
+### Communication Intensity
+Communication intensity measures how much data exchange is needed between accelerators. It quantifies the performance overhead from coordinating multiple devices during distributed training and inference.
 
 `chi = (chi_base + chi_tp * (tp - 1) + chi_pp * (pp - 1)) * (chi_infer_scale if mode == "inference" else 1)`
 
-Where:
-- Higher `tp` (tensor parallelism) requires more cross-device communication for matrix operations
-- Higher `pp` (pipeline parallelism) requires passing activations between pipeline stages
-- Inference typically has lower communication needs than training  
+### Components Breakdown
+
+**Base Communication (`chi_base`):**
+- Represents fundamental coordination overhead even with single-device workloads
+- Includes synchronization barriers, gradient accumulation, and memory management
+- Typical range: 0.05-0.15 (5-15% overhead)
+
+**Tensor Parallelism Overhead (`chi_tp * (tp - 1)`):**
+- Scales linearly with tensor parallelism degree
+- Each additional TP stage requires:
+  - **Forward pass**: Broadcasting activations across devices
+  - **Backward pass**: All-reducing gradients
+  - **Memory**: Storing intermediate activations for gradient computation
+- Communication volume scales with model dimensions (hidden_size, attention heads)
+- Typical `chi_tp`: 0.08-0.25 per additional TP stage
+
+**Pipeline Parallelism Overhead (`chi_pp * (pp - 1)`):**
+- Scales with pipeline depth
+- Each pipeline stage boundary requires:
+  - **Activation passing**: Forwarding intermediate results
+  - **Gradient passing**: Backward propagation through pipeline
+  - **Micro-batching**: Synchronization between pipeline stages
+- Communication volume depends on activation size and sequence length
+- Typical `chi_pp`: 0.10-0.30 per additional PP stage
+
+**Inference Scaling (`chi_infer_scale`):**
+- Inference workloads typically have lower communication intensity
+- Reasons:
+  - No gradient computation (eliminates backward pass communication)
+  - Often uses smaller batch sizes
+  - KV-cache reduces recomputation overhead
+- Typical `chi_infer_scale`: 0.3-0.7 (30-70% of training communication)
+
+### Communication Patterns by Parallelism Strategy
+
+**Data Parallelism (DP):**
+- Communication: All-reduce of gradients
+- Frequency: Once per training step
+- Volume: Model parameter size
+- Overhead: Included in `chi_base`
+
+**Tensor Parallelism (TP):**
+- Communication: Activation and gradient exchanges
+- Frequency: Every forward/backward pass
+- Volume: Activation tensors (varies by layer)
+- Overhead: `chi_tp * (tp - 1)`
+
+**Pipeline Parallelism (PP):**
+- Communication: Activation forwarding between stages
+- Frequency: Every micro-batch
+- Volume: Intermediate activations
+- Overhead: `chi_pp * (pp - 1)`
+
+### Real-World Communication Examples
+
+**GPT-3 Scale (175B parameters, TP=8, PP=8):**
+- High communication intensity due to large model size
+- TP=8: ~8x activation exchanges per layer
+- PP=8: ~8 pipeline stage boundaries
+- Total `chi` ≈ 0.15 + 8×0.20 + 8×0.25 = 3.55 (355% overhead)
+
+**Smaller Model (7B parameters, TP=2, PP=2):**
+- Lower communication intensity
+- TP=2: Minimal tensor parallelism overhead
+- PP=2: Simple two-stage pipeline
+- Total `chi` ≈ 0.10 + 1×0.15 + 1×0.20 = 0.45 (45% overhead)
+
+### Measurement and Calibration
+
+**Empirical Measurement Required:**
+- `chi_base`, `chi_tp`, `chi_pp` must be measured on actual hardware
+- Measurement approach:
+  1. Run single-device baseline
+  2. Scale up TP gradually (2, 4, 8) and measure throughput degradation
+  3. Scale up PP gradually (2, 4, 8) and measure throughput degradation
+  4. Fit linear regression to extract coefficients
+- Network fabric affects measured values (InfiniBand vs Ethernet)
+
+**Typical Measured Values:**
+- Modern GPUs (H100, A100): `chi_tp` ≈ 0.15-0.25, `chi_pp` ≈ 0.20-0.30
+- Older GPUs (V100): `chi_tp` ≈ 0.20-0.35, `chi_pp` ≈ 0.25-0.40
+- Cloud instances: Higher values due to virtualization overhead
+
 ```60:65:atlas_fabric/simulate.py
 comm_intensity = float(intensity["base"]) + float(intensity["per_tp"])*(tp-1) + float(intensity["per_pp"])*(pp-1)
 if is_infer:

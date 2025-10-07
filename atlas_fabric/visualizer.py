@@ -165,12 +165,14 @@ class BenchmarkVisualizer:
             cost = result.get("dollar_per_1k_tokens", 0)
             target = result["target"]["name"]
             workload = result["workload"]["name"]
+            opt_label = result.get("label", "unknown")
             
             data_points.append({
                 "tokens_sec": tokens_sec,
                 "cost": cost,
                 "target": target,
                 "workload": workload,
+                "opt_label": opt_label,
                 "label": f"{target.split('_')[0]}_{workload.split('_')[0]}"
             })
         
@@ -186,7 +188,10 @@ class BenchmarkVisualizer:
             ax.scatter(dp["tokens_sec"], dp["cost"], 
                       color=target_colors[dp["target"]],
                       s=100, alpha=0.7, edgecolors='black', linewidth=1)
-            ax.annotate(dp["label"], (dp["tokens_sec"], dp["cost"]),
+            
+            # Create annotation with optimization status
+            annotation_text = f"{dp['label']}\n({dp['opt_label']})"
+            ax.annotate(annotation_text, (dp["tokens_sec"], dp["cost"]),
                        fontsize=8, ha='center', va='bottom',
                        xytext=(0, 6), textcoords='offset points')
         
@@ -445,31 +450,26 @@ class BenchmarkVisualizer:
         ax.grid(True, axis='y', alpha=0.3)
         ax.legend()
 
-        # Annotate bars with microbatch and overhead information
-        for idx, bar in enumerate(bars_pre):
-            mb = pre_mbs[idx]
-            if mb and bar.get_height() > 0:
-                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
-                        "Pre-Opt Micro-Batch", ha='center', va='bottom', fontsize=8)
+        # Annotate bars with numeric values (tokens/sec) on top of each bar
+        def _format_value(value: float) -> str:
+            try:
+                # Use thousands separator; fall back to one decimal for small values
+                return f"{value:,.0f}" if value >= 10 else f"{value:.1f}"
+            except Exception:
+                return f"{value}"
 
-        for idx, bar in enumerate(bars_post):
-            mb = post_mbs[idx]
-            if mb and bar.get_height() > 0:
-                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
-                        "Post-Opt Micro-Batch", ha='center', va='bottom', fontsize=8)
-
-        for idx, bar in enumerate(bars_epoch):
-            epoch = epoch_vals[idx]
-            post = post_vals[idx]
-            if bar.get_height() > 0:
-                if post > 0:
-                    delta_pct = (epoch / post - 1) * 100
-                    label = "Schedule Overhead\n" + f"({delta_pct:+.1f}% vs Post)"
-                else:
-                    label = "Schedule Overhead"
-                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
-                        label,
-                        ha='center', va='bottom', fontsize=8)
+        for bars in (bars_pre, bars_post, bars_epoch):
+            for bar in bars:
+                height = bar.get_height()
+                if height > 0:
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        height,
+                        _format_value(height),
+                        ha='center',
+                        va='bottom',
+                        fontsize=8
+                    )
 
         plt.tight_layout()
 
@@ -721,7 +721,7 @@ class BenchmarkVisualizer:
                     f"                    <td>{html_module.escape(result['workload']['name'])}</td>\n"
                     f"                    <td>{result['record']['tokens_per_sec']:.2f}</td>\n"
                     f"                    <td>${result.get('dollar_per_1k_tokens', 0):.4f}</td>\n"
-                    f"                    <td>{result['record'].get('p99_ms', 0):.2f}</td>\n"
+                    f"                    <td>{(result['record'].get('p99_ms') if 'inference' in result['workload'].get('name','') else 'N/A') if ('inference' in result['workload'].get('name','')) else 'N/A'}</td>\n"
                     f"                    <td>{result['record']['flop_utilization']*100:.1f}%</td>\n"
                     "                </tr>\n"
                 )

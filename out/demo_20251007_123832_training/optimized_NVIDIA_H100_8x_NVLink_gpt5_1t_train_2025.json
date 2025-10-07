@@ -1,0 +1,138 @@
+{
+  "dollar_per_1k_tokens": 0.009198165991376532,
+  "knobs": {
+    "cuda_graphs": true,
+    "fabric": "IB",
+    "gpudirect_rdma": true,
+    "microbatch": 2,
+    "virt": "bare"
+  },
+  "label": "post-opt",
+  "record": {
+    "artifacts": {
+      "env": "sim://manifest",
+      "logs": "sim://logs",
+      "trace": "sim://trace"
+    },
+    "comm_compute_ratio": 0.1377452037076956,
+    "failures": 0,
+    "flop_utilization": 0.702075,
+    "hbm_bw_util": 0.82,
+    "node_power_w": 8670.0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0,
+    "peak_mem_gb": 80.0,
+    "retries": 0,
+    "step_time_ms": 348723.9532959136,
+    "tokens_per_sec": 3006.894106612227,
+    "ttft_ms": 0.0
+  },
+  "target": {
+    "accelerators_per_node": 8,
+    "collectives": [
+      "allreduce",
+      "allgather",
+      "reducescatter"
+    ],
+    "container_base": "ghcr.io/org/h100:stable",
+    "cost": {
+      "energy_watts_node": 10200,
+      "hourly_usd": 98.32,
+      "pue": 1.2
+    },
+    "host_cpu_arch": "x86",
+    "instance_type": "BM.GPU.H100",
+    "interconnect": {
+      "bw_GBps": 900,
+      "type": "NVLink"
+    },
+    "max_batch_tokens": 32768,
+    "memory_gb_per_accel": 80,
+    "name": "NVIDIA_H100_8x_NVLink",
+    "notes": "Pricing: AWS p5.48xlarge on-demand ($98.32/hr, us-east-1). Power: NVIDIA DGX H100 max ~10.2kW (typical under load 6\u00e2\u20ac\u201c10kW).",
+    "num_nodes": 1,
+    "numeric": [
+      "bf16",
+      "fp16",
+      "fp8",
+      "int8"
+    ],
+    "vendor": "NVIDIA"
+  },
+  "track": "parity",
+  "ts": "2025-10-07T12:38:38",
+  "workload": {
+    "dataloader": "streaming",
+    "duration_minutes": 5,
+    "framework": "pytorch",
+    "model_family": "gpt",
+    "name": "gpt5_1t_train",
+    "notes": "Representative GPT-5 scale pretraining step",
+    "optimizer": {
+      "grad_clip_norm": 1.0,
+      "type": "fused_adam"
+    },
+    "parallelism": {
+      "dp": 16,
+      "pp": 8,
+      "tp": 8
+    },
+    "params": {
+      "hidden_size": 16384,
+      "n_heads": 128,
+      "n_layers": 160,
+      "vocab_size": 200000
+    },
+    "precision": {
+      "activations": "bf16",
+      "weights": "fp8"
+    },
+    "runtime_tuning": {
+      "cuda_graphs": true,
+      "fabric": "IB",
+      "gpudirect_rdma": true,
+      "microbatch": 2,
+      "virt": "bare"
+    },
+    "schedule": {
+      "phases": [
+        {
+          "duration_minutes": 20,
+          "name": "warmup",
+          "overrides": {
+            "precision": {
+              "activations": "bf16",
+              "weights": "bf16"
+            }
+          },
+          "tokens_scale": 0.4
+        },
+        {
+          "duration_minutes": 160,
+          "name": "main_run",
+          "tokens_scale": 1.0
+        },
+        {
+          "duration_minutes": 40,
+          "name": "finetune",
+          "overrides": {
+            "optimizer": {
+              "grad_clip_norm": 0.7
+            },
+            "sequence": {
+              "generate": 0,
+              "prompt": 16384
+            }
+          },
+          "tokens_scale": 0.6
+        }
+      ]
+    },
+    "sequence": {
+      "generate": 0,
+      "prompt": 32768
+    },
+    "track": "parity"
+  }
+}

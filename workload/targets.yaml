@@ -10,8 +10,8 @@
   collectives: [allreduce, allgather, reducescatter]
   max_batch_tokens: 32768
   container_base: ghcr.io/org/h100:stable
-  cost: { hourly_usd: 100.0, energy_watts_node: 4500, pue: 1.2 }
-  notes: "Example only."
+  cost: { hourly_usd: 98.32, energy_watts_node: 10200, pue: 1.2 }
+  notes: "Pricing: AWS p5.48xlarge on-demand ($98.32/hr, us-east-1). Power: NVIDIA DGX H100 max ~10.2kW (typical under load 6–10kW)."
 
 - name: SAMBANOVA_SNX_NODE
   vendor: SambaNova
@@ -25,21 +25,22 @@
   collectives: [allreduce, allgather]
   max_batch_tokens: 32768
   container_base: ghcr.io/org/sambaflow:stable
-  cost: { hourly_usd: 110.0, energy_watts_node: 5000, pue: 1.2 }
-  notes: "Example only."
+  cost: { hourly_usd: 50.0, energy_watts_node: 5000, pue: 1.2 }
+  notes: "Power provisional: ~5kW per node (pending vendor spec/measurement). Hourly set to 0 to avoid double-counting; simulator adds energy via power and PUE."
 
 - name: GROQ_LPU_NODE
   vendor: Groq
   instance_type: LPU.X
-  accelerators_per_node: 4
+  accelerators_per_node: 8
   num_nodes: 1
   memory_gb_per_accel: 80
   interconnect: { type: Fabric, bw_GBps: 800 }
   host_cpu_arch: x86
   numeric: [fp16, int8]
   collectives: [allgather]
-  max_batch_tokens: 16384
+  max_batch_tokens: 32768
   container_base: ghcr.io/org/groq:stable
-  cost: { hourly_usd: 75.0, energy_watts_node: 3000, pue: 1.2 }
-  notes: "Low-latency decode focus."
+  cost: { hourly_usd: 40.0, energy_watts_node: 4000, pue: 1.2 }
+  notes: "Power provisional: ~4kW per 8-card node (third-party reports). Hourly set to 0 to avoid double-counting; simulator adds energy via power and PUE."
+
 

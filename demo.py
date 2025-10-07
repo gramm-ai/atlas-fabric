@@ -231,9 +231,19 @@ def display_results_summary(results: List[Dict[str, Any]]):
     """Display a formatted summary of results"""
     if not results:
         return
-    
-    print_header("PERFORMANCE SUMMARY")
-    
+
+    # Decide header based on workload type in this result set
+    try:
+        valid_results_probe = [r for r in results if r and "workload" in r]
+        is_inference_set = (
+            len(valid_results_probe) > 0 and all("inference" in r["workload"]["name"] for r in valid_results_probe)
+        )
+    except Exception:
+        is_inference_set = False
+
+    header_text = "INFERENCE PERFORMANCE" if is_inference_set else "TRAINING PERFORMANCE"
+    print_header(header_text)
+
     # Create summary table
     print(f"{'Accelerator':30} {'Workload':20} {'Tokens/sec':>12} {'$/1k tokens':>12} {'P99 Latency':>14}")
     print("-" * 92)
@@ -256,9 +266,15 @@ def display_results_summary(results: List[Dict[str, Any]]):
         workload_name = result["workload"]["name"][:19]
         tokens_sec = result["record"]["tokens_per_sec"]
         cost = result.get("dollar_per_1k_tokens", 0)
-        p99 = result["record"].get("p99_ms", 0)
+        # Show P99 only for inference workloads; otherwise display N/A
+        row_is_infer = "inference" in result["workload"].get("name", "")
+        if row_is_infer:
+            p99_val = result["record"].get("p99_ms", 0.0)
+            p99_str = f"{p99_val:12.2f}ms"
+        else:
+            p99_str = f"{'N/A':>12}  "
 
-        print(f"{target_name:30} {workload_name:20} {tokens_sec:12.2f} {cost:12.4f} {p99:12.2f}ms")
+        print(f"{target_name:30} {workload_name:20} {tokens_sec:12.2f} {cost:12.4f} {p99_str}")
     
 
 def visualize_results(results_dir: str):
@@ -329,8 +345,6 @@ def run_scenario(scenario: Dict[str, Any], base_output_dir: str, *, skip_visuals
     scenario_dir.mkdir(parents=True, exist_ok=True)
 
     print_header(f"Scenario: {scenario['name']}")
-    print_info(f"Description: {scenario['description']}")
-    print_info(f"Output directory: {scenario_dir}")
 
     results: List[Dict[str, Any]] = []
     step = 1

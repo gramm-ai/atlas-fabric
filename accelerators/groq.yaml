@@ -1,6 +1,7 @@
 description: "Groq LPU performance model optimized for ultra-low-latency decode"
 match:
   vendor: Groq
+  name: GROQ_LPU_NODE
 best_for:
   - real-time inference (small batch)
   - latency-sensitive applications
@@ -28,6 +29,7 @@ communication:
     IB: 1.0
     RoCE: 1.08
     Vendor: 1.02
+    Fabric: 1.02
   jitter_per_sriov: 0.04
   gpudirect_multiplier: 0.55
   min_overhead: 0.015
