@@ -1,19 +1,20 @@
-# Atlas Fabric — Optimized Resource Benchmarking for Infrastructure & Training AI
+# Atlas Fabric — LLM Infrastructure Benchmarking
 
 ## Overview
 
-Atlas Fabric is a comprehensive benchmarking and decision-support framework for evaluating LLM infrastructure choices. It provides a unified interface to compare different accelerators, optimize configurations, and make data-driven infrastructure decisions.
+Atlas Fabric benchmarks and compares LLM infrastructure options. Test different accelerators, optimize configs, and estimate costs for both training and inference workloads.
 
-- If you are interested in the underlying mathematical model for training and inference performance and cost estimation, see the companion document [`model_equations.md`](./model_equations.md). Every field referenced there must be provided in the YAML and knob inputs (the simulator no longer applies hidden defaults). For calibration methodology and tuning guidance for each hardware accelerator, refer to [`model_calibration.md`](./model_calibration.md).
+- See [`model_equations.md`](./model_equations.md) for the math behind performance and cost calculations
+- See [`model_calibration.md`](./model_calibration.md) for hardware tuning and calibration
 
-### Key Features
+### Features
 
-- **Multi-Accelerator Support**: Example profiles for NVIDIA, Groq, and SambaNova (extendable via YAML)
-- **Comprehensive Metrics**: Throughput, latency, cost, power efficiency
-- **Configuration Optimization**: Automatic tuning for performance vs cost
-- **Rich Visualizations**: Performance charts, cost analysis, utilization heatmaps
-- **Interactive Demo**: Guided scenarios for common use cases
-- **Detailed Reporting**: HTML and Markdown reports with insights
+- **Multi-Accelerator**: NVIDIA, Groq, SambaNova profiles (add your own via YAML)
+- **Key Metrics**: Throughput, latency, cost, power
+- **Auto-Optimization**: Tunes performance vs cost trade-offs
+- **Visualizations**: Performance charts, cost breakdowns, utilization maps
+- **Demo Mode**: Pre-configured benchmark scenarios
+- **Reports**: HTML and Markdown output with analysis
 
 ## Quick Start
 
@@ -65,19 +66,20 @@ python -m atlas_fabric.cli report \
 
 ### Interactive Demo
 
-The demo provides guided scenarios:
+Run pre-configured benchmarks:
 
 ```bash
 python demo.py
 ```
 
-Running the demo saves a Markdown report (`report.md`) inside the newly created `out/demo_*` directory for each scenario.
+This runs two default scenarios and saves reports to `out/demo_*/`:
+- `gpt5_1t_training`: Training throughput and cost across accelerators
+- `gpt5_1t_inference`: Inference capacity and latency under various traffic loads
 
-The default automated run executes two scenarios:
-- `gpt5_1t_training`: multi-phase training throughput and cost evaluation across the accelerators defined in your YAML profiles.
-- `gpt5_1t_inference`: traffic-aware inference capacity and cost comparison using the same target definitions.
-
-You can extend these scenarios by adding additional models or workloads to `workload/workloads.yaml` and pointing them at new target definitions in `workload/targets.yaml`. Once the YAML entries are in place, update `demo.py` (or run the CLI directly) to reference the new workload names, and the demo will render reports for your custom scenarios alongside the defaults.
+To add custom scenarios:
+1. Define workloads in `workload/workloads.yaml`
+2. Add targets in `workload/targets.yaml`
+3. Update `demo.py` or use the CLI directly
 
 ## Architecture
 
@@ -91,10 +93,10 @@ You can extend these scenarios by adding additional models or workloads to `work
                          │
 ┌────────────────────────▼────────────────────────────┐
 │                    Core Engine                      │
-│  ┌──────────────┐  ┌────────────┐  ┌──────────────┐   │
-│  │ LLM Workload │  │Accelerator │  │   Runtime    │   │
-│  │     Specs    │  │    Specs   │  │    Tuning    │   │
-│  └──────────────┘  └────────────┘  └──────────────┘   │
+│  ┌──────────────┐  ┌────────────┐  ┌──────────────┐ │
+│  │ LLM Workload │  │ Accelerator│  │   Runtime    │ │
+│  │     Specs    │  │    Specs   │  │    Tuning    │ │
+│  └──────────────┘  └────────────┘  └──────────────┘ │
 └────────────────────────┬────────────────────────────┘
                          │
 ┌────────────────────────▼────────────────────────────┐
@@ -128,10 +130,10 @@ python -m atlas_fabric.cli run \
   --out results
 ```
 
-Considerations for `gpt5_1t_train`:
-- Sequence length is 32k tokens; adjust if your curriculum uses shorter contexts early on.
-- Parallelism defaults to `tp:8`, `pp:8`, `dp:16` (1024-way); modify to reflect the topology you plan to benchmark.
-- Precision defaults to FP8 weights with BF16 activations; override via `workload.schedule` phases if you need different regimes.
+Key settings for `gpt5_1t_train`:
+- Sequence length: 32k tokens
+- Parallelism: `tp:8`, `pp:8`, `dp:16` (1024-way total)
+- Precision: FP8 weights, BF16 activations
 
 ## Configuration
 
@@ -185,6 +187,18 @@ Considerations for `gpt5_1t_train`:
     pue: 1.2
 ```
 
-## Visualization
+## Sample Output
 
-Visualization helpers referenced in earlier versions were removed during the simulator refactor. The current reference CLI and demo runs emit structured JSON and Markdown reports for analysis.
+The simulator generates JSON data and Markdown reports. Example visualizations:
+
+- **Training comparison** — throughput and cost across accelerators
+![Training performance comparison](./out/demo_20251006_214147_training/performance_comparison.png)
+
+- **Inference latency** — latency distribution with queueing effects
+![Inference latency distribution](./out/demo_20251006_214200_inference/latency_distribution.png)
+
+### Documentation
+
+- [`model_equations.md`](./model_equations.md) — Mathematical model and formulas (semi-empirical)
+- [`model_calibration.md`](./model_calibration.md) — How to measure and calibrate model parameters
+- [`workload_authoring.md`](./workload_authoring.md) — How to create custom workloads

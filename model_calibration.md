@@ -1,134 +1,444 @@
-# Atlas Fabric Model Calibration Guide
+# Model Calibration Guide
 
-## 1. Purpose and Scope
+## Overview
 
-This guide details how to calibrate the Atlas Fabric simulator so that its accelerator, workload, and knob parameters reproduce empirical behavior. The focus is on latency-sensitive inference workloads, but the same protocol applies to throughput and training measurements. Each section expands the recommended practices for modeling service time, queueing, heavy-tail risk, and multi-objective trade-offs.
+This guide provides detailed procedures for empirically measuring the parameters required by the Atlas Fabric semi-empirical performance model. Accurate calibration is essential for reliable performance predictions.
 
-## 2. Calibration Workflow Overview
+**Key Principle**: Measure in controlled conditions, isolate variables, and validate against production workloads.
 
-1. **Enforce the measurement protocol** to guarantee reproducibility.
-2. **Collect raw traces** that separate isolated service time from end-to-end latency, capture hardware counters, and annotate experimental factors.
-3. **Fit service-time distributions** per operation/model and validate the fit.
-4. **Model queueing dynamics** using empirical arrivals and calibrated service distributions; map queue estimates into schedule-aware latency aggregation.
-5. **Summarize tail behavior** with percentiles, CCDFs, and tail conditional means; attach uncertainty via resampling.
-6. **Attribute variance** to controllable knobs and hardware states via designed experiments.
-7. **Build quantile-aware surrogates** for co-optimization and extreme-value analysis for rare events.
-8. **Visualize and report** results in decision-ready formats, mapping measurements back to Atlas Fabric configuration parameters.
+## 1. Hardware Performance Parameters
 
-## 3. Measurement Protocol
+### 1.1 Base Token Throughput (`B_base`)
 
-- **Warm-up:** Run at least 2–5× the largest batch before measuring to stabilize caches, JIT, and compilation artifacts.
-- **CPU pinning & governors:** Pin workloads and load generators to fixed cores; set CPU/GPU governors (P-states, frequency locks) to eliminate drift.
-- **Clock sync:** Synchronize host and accelerator clocks (e.g., `ptp4l`, `chrony`) so latency measurements align across machines.
-- **Cache/TLB control:** Flush or fix cache state between runs when isolating service time; document L2/HBM residency strategies.
-- **Seed management:** Fix RNG seeds spanning data loaders, sequence sampling, and workload simulators.
-- **Stable load generators:** Use deterministic request schedules or well-characterized stochastic generators; log generator metadata with every run.
-- **Artifact logging:** Store firmware versions, driver hashes, and power settings alongside measurement batches for traceability.
+**What it measures**: Maximum tokens per second a single accelerator can process under ideal conditions.
 
-## 4. Data Collection Requirements
+**Measurement Procedure**:
+```python
+# 1. Run single-GPU benchmark with optimal batch size
+# 2. Use a standard model (e.g., GPT-2 1.5B)
+# 3. Disable all multi-GPU communication
+# 4. Measure for different sequence lengths
 
-- **Per-request timelines:** Record enqueue time, dispatch time, first-token time, completion time, and per-stage timestamps for decode vs. prefill.
-- **Isolated service-time probes:** Trigger requests on an idle accelerator to measure pure service time per operation/model variant.
-- **Hardware counters:** Capture utilization, SM occupancy, power draw, memory bandwidth, and PCIe/NVLink throughput to inform `rho_base`, `kappa_comm`, and communication penalties.
-- **Control knobs:** Log binary and continuous knobs (`cuda_graphs`, `gpudirect`, batch size, thread pools) for regression/DOE analysis.
-- **Environmental sensors:** Optionally capture temperature, voltage, and contention signals to explain residual variance.
+for batch_size in [1, 2, 4, 8, 16, 32, 64]:
+    for seq_length in [512, 1024, 2048, 4096]:
+        tokens_per_second = benchmark_single_gpu(
+            model="gpt2-1.5B",
+            batch_size=batch_size,
+            sequence_length=seq_length,
+            warmup_steps=10,
+            measure_steps=100
+        )
+        record_measurement(tokens_per_second)
 
-## 5. Service-Time Modeling
+# B_base = maximum observed tokens_per_second
+```
 
-- **Separation from queueing:** Compute service time `S = completion − dispatch` from isolated runs; exclude queued time to avoid conflating scheduling effects.
-- **Distribution selection:** Fit log-normal, Weibull, or Gamma distributions. When Q-Q plots reveal bimodality (e.g., kernel compilation cold start), fit a finite mixture (e.g., two log-normals) and select via AIC/BIC.
-- **Parameter estimation:** Use maximum likelihood or Bayesian inference with weak priors; store fitted parameters per model, sequence length, and batch size.
-- **Goodness-of-fit:** Generate Q-Q plots, Kolmogorov–Smirnov statistics, and probability plots; require that high-quantile residuals fall within confidence envelopes before accepting the fit.
-- **Temporal drift:** Re-evaluate fits periodically; use rolling windows or hierarchical models to capture slow drift in firmware or thermal conditions.
-- **Mapping to simulator:** Translate mean service rate to `B_base` and `f_vendor(mode)`; heavy-tail multipliers inform `tail_comm` and `sigma_tail` in `atlas_fabric/simulate.py`.
+**Validation**: 
+- Should be within 20% of theoretical peak (TFLOPS × model_efficiency)
+- Consistent across multiple runs (< 5% variance)
 
-## 6. Queueing Model Calibration
+### 1.2 Base Utilization (`rho_base`)
 
-- **Arrival process:** Measure inter-arrival times. If coefficient of variation ≈1, an M/G/m approximation is reasonable; otherwise, fit a renewal process (e.g., log-normal arrivals) and treat the system as G/G/m. Calibrate profile priors (`arrival_load_factor`, `arrival_cv`) per traffic regime so that inferred arrivals match telemetry.
-- **Server count:** Match `m` to active accelerator instances or virtual lanes; include replication if requests are broadcast. Feed these counts back into schedule phases via `arrival.servers` overrides.
-- **Scheduling policy:** Capture dispatcher rules (round robin, SRPT, FIFO). Simulate queueing using empirical service-time samples and policy-specific scheduling; encode effective waiting times when deriving the `queue_wait_ms` fields surfaced by the adapter.
-- **Validation:** Compare simulated latency percentiles with measured end-to-end latencies. Adjust queue model until residuals across P50/P95/P99 fall within measurement CI, and verify waiting fractions align with traced queue instrumentation.
-- **Sensitivity:** Stress-test the queue across target arrival rates and burst scenarios to quantify tail growth. Update `REQUEST_PROFILE_DEFAULTS` and phase priors when load patterns shift.
+**What it measures**: Fraction of theoretical compute actually achieved in practice.
 
-## 7. Tail Metrics and Reporting
+**Measurement Procedure**:
+```python
+# 1. Measure actual FLOPS during model execution
+actual_flops = profile_gpu_flops(
+    model=standard_model,
+    duration=60_seconds,
+    tool="nvidia-smi" or "rocm-smi"
+)
 
-- **Percentiles:** Always publish `P50`, `P95`, `P99`, `P99.9`. Derive time-to-first-token (`TTFT`) separately when relevant.
-- **CCDF:** Plot complementary CDF `P(Latency > x)` on log-x scales to highlight SLO exceedance probabilities.
-- **Tail Conditional Mean:** Compute `E[Latency | Latency > P99]` to quantify the severity of tail events.
-- **SLO miss rate:** For each latency objective `L`, report `P(Latency > L)`; integrate into decision reports.
+# 2. Calculate theoretical FLOPS
+theoretical_flops = num_accelerators * peak_tflops_per_accelerator * 1e12
 
-## 8. Uncertainty Quantification
+# 3. Compute utilization
+rho_base = actual_flops / theoretical_flops
+```
 
-- **Bootstrap CIs:** Use percentile bootstrap with ≥1,000 resamples for each reported percentile and tail conditional mean.
-- **Comparative tests:** Apply paired bootstraps or permutation tests when comparing configurations; report p-values or confidence that one dominates.
-- **Stochastic dominance:** Evaluate first- and second-order dominance of latency distributions to ensure improvements hold across tails.
-- **Documentation:** Include CI bounds and testing methodology in stakeholder reports to prevent overinterpretation of noisy wins.
+**Expected Values**:
+- Training: 0.4-0.6 (40-60% utilization)
+- Inference: 0.3-0.5 (30-50% utilization)
+- Memory-bound workloads: 0.2-0.4
 
-## 9. Variance Attribution
+### 1.3 Vendor Scaling Factor (`f_vendor`)
 
-- **Factorial DOE:** Design experiments across factors such as batch size, model variant, hardware state, frequency governor, and contention level.
-- **ANOVA / Sobol indices:** Quantify each factor's main effects and interactions on tail latency and throughput; use Sobol if the response is non-linear.
-- **Iterative narrowing:** Focus further experimentation on high-sensitivity factors; feed their contributions into Atlas Fabric knob priors (`delta_rho_*`).
+**What it measures**: Hardware-specific performance multipliers for different operational modes.
 
-## 10. Quantile-Aware Modeling
+**Measurement Procedure**:
+```python
+# Baseline measurement (e.g., NVIDIA A100)
+baseline_throughput = measure_throughput(
+    hardware="A100",
+    mode="training",
+    model=standard_benchmark
+)
 
-- **Quantile regression:** Fit conditional models for `P95` and `P99` as functions of knobs and workload parameters; allow separate coefficients from median models.
-- **Algorithm choices:** Use gradient boosted quantile regression, generalized additive models, or neural quantile regressors when interactions are complex.
-- **Usage in Atlas Fabric:** Embed quantile models as surrogate predictors for tail multipliers or to parameterize `tail_comm`, enabling more accurate inference mode knobs.
+# Target hardware measurement
+target_throughput = measure_throughput(
+    hardware=target_hardware,
+    mode=mode,  # "training" or "inference"
+    model=standard_benchmark
+)
 
-## 11. Extreme-Value Analysis
+f_vendor[mode] = target_throughput / baseline_throughput
+```
 
-- **Peaks-over-threshold (POT):** When latency tails exceed fitted distributions, select a high threshold (e.g., 99th percentile) and fit a Generalized Pareto Distribution to the exceedances.
-- **Return levels:** Estimate latencies associated with rare events (e.g., once per day/week) to set guard-band SLOs.
-- **Integration:** Use POT-derived parameters to cap `tail_comm` or inject rare spikes into queueing simulations.
+## 2. Communication Parameters
 
-## 12. Multi-Objective Surrogate and Optimization
+### 2.1 Communication Intensity (`chi_base`, `chi_tp`, `chi_pp`)
 
-- **Objective set:** Model `{P99 latency, throughput, energy/op, cost/op}` simultaneously; include constraint penalties for SLO violations.
-- **Surrogate choices:** Gaussian Processes with ARD kernels, multi-output gradient boosting, or random forest surrogates with quantile estimates.
-- **Bayesian optimization:** Run acquisition functions (e.g., Expected Hypervolume Improvement) to trace the Pareto frontier across hardware/software knobs.
-- **Feedback loop:** Update surrogate with fresh measurements; reflect optimized settings back into YAML specs (`util`, `tail`, `power`).
+**What it measures**: Data transfer requirements for different parallelization strategies.
 
-## 13. Visualization Standards
+**Measurement Procedure**:
+```python
+# Measure baseline (no parallelism)
+single_gpu_time = benchmark_time(tp=1, pp=1)
 
-- **CDF/CCDF plots:** Present on log-x axes; annotate SLO thresholds and confidence bands.
-- **Violin plots:** Show latency distributions per configuration for quick comparison; overlay percentile markers.
-- **Latency breakdown:** Stack service vs. waiting components to highlight queue-driven inflation.
-- **DOE heatmaps:** Visualize factor effects (main and interaction) to communicate variance attribution.
-- **Optimization frontier:** Plot Pareto curves for `P99 latency` vs. throughput or cost to show trade-offs.
+# Measure tensor parallelism scaling
+for tp in [2, 4, 8]:
+    multi_gpu_time = benchmark_time(tp=tp, pp=1)
+    comm_overhead = (multi_gpu_time - single_gpu_time) / single_gpu_time
+    
+    # Use linear regression to find chi_tp
+    # overhead = chi_base + chi_tp * (tp - 1)
 
-## 14. Stakeholder Report Template
+# Measure pipeline parallelism scaling  
+for pp in [2, 4, 8]:
+    multi_gpu_time = benchmark_time(tp=1, pp=pp)
+    comm_overhead = (multi_gpu_time - single_gpu_time) / single_gpu_time
+    
+    # Use linear regression to find chi_pp
+    # overhead = chi_base + chi_pp * (pp - 1)
+```
 
-Prepare a one-page summary per configuration containing:
+**Data Collection Points**:
+- Measure with NCCL profiling enabled
+- Record bytes transferred per step
+- Calculate as fraction of compute time
 
-- Workload description and arrival rate assumptions.
-- `P50/P95/P99/P99.9 ± CI`, `TTFT`, and tail conditional mean.
-- CCDF plot with SLO miss probabilities.
-- Energy per operation, cost per operation, utilization metrics.
-- SLO miss rate at the target latency `L` and recommended guard bands.
-- Notable contributing factors (from variance analysis) and suggested knob adjustments.
+### 2.2 Network Fabric Factors (`gamma_fabric`)
 
-## 15. Mapping Measurements to Atlas Fabric Parameters
+**What it measures**: Performance penalty for different interconnect technologies.
 
-- **Utilization (`rho_base`, `delta_rho_*`):** Derive from measured SM occupancy and throughput under baseline vs. knob-enabled runs. Normalize so that `rho_base` reflects the best-fit mean utilization, while deltas capture marginal gains.
-- **Queue priors (`REQUEST_PROFILE_DEFAULTS`):** Fit load factors and arrival CVs for each traffic regime (steady, peak, spike, low). Update these priors so schedule phases infer realistic arrival rates when explicit telemetry is absent.
-- **Communication penalties (`gamma_*`, `omega`):** Use measured communication overhead ratios (e.g., NVLink/PCIe bandwidth saturation) to calibrate `comm_overhead` factors; align with mixture components from service-time models.
-- **Latency coefficients (`lat_base_coeff`, `tail_comm`, `tail_sriov`):** Fit `p50` regression against `compute_rate/accels`; map tail multipliers from quantile regression or POT fits to `tail_comm` and virtualization surcharges to `tail_sriov`.
-- **Schedule queue outputs (`queue_latency_ms`, `queue_wait_ms`):** Validate aggregated waiting times against empirical telemetry. Adjust waiting heuristics (e.g., factors on `Wq`) to match P95/P99 deltas between service and total latency.
-- **Noise parameters (`sigma_noise`, `sigma_tail`):** Estimate from residual variability after accounting for DOE factors; use bootstrap residuals to ensure the simulator reproduces observed jitter.
-- **Power model (`phi_idle`, `phi_util`):** Fit linear models between utilization and measured node power; update YAML values accordingly.
-- **Schedule overrides:** For multi-phase workloads, encode measured per-phase scaling (`tokens_scale`, `autoscale_factor`) and arrival bursts to reproduce empirical latency swings.
+**Measurement Procedure**:
+```python
+fabric_measurements = {}
 
-## 16. Hardware Default Justifications
+# Baseline: InfiniBand or NVLink
+fabric_measurements["infiniband"] = measure_allreduce_bandwidth(
+    fabric="infiniband",
+    message_sizes=[1MB, 10MB, 100MB, 1GB],
+    pattern="ring"
+)
 
-- **Compute throughput.** `base_tokens_per_accel` and mode-specific factors in the accelerator YAMLs reflect sustained transformer throughput in public disclosures. NVIDIA H100 MLPerf Inference numbers (3.87K tokens/s across 8 GPUs) back-solve to ~1.1K tokens/s per accelerator with a 0.92 utilization ceiling; Groq’s GPT-J latency demos show ~1.25K tokens/s per LPU, motivating the 1.2K base paired with a 0.6 training factor for their inference-first design; SambaNova SNX training reports converge around 0.95× A100 throughput, supporting the 950-token baseline.
-- **Utilization envelope.** The default base utilization (0.55–0.60) and knob increments align with GPU SM occupancy studies: CUDA Graphs often deliver 10–12% effective occupancy gains, while GPUDirect RDMA removes ~5% host-side stalls. We cap utilization at 0.90–0.93 to reflect the diminishing returns observed once memory stalls dominate kernel execution.
-- **Communication intensity.** Collective communication papers report NVLink/InfiniBand consuming 10–12% of iteration time at TP/PP >1. RoCE penalties (+10–12%) model PCIe/Ethernet contention, while vendor fabrics sit between the two based on proprietary interposers. These observations inform the `intensity` base and the per-topology `fabric_factors`.
-- **Latency model.** `base_p50_coeff`, `min_p50_ms`, and tail multipliers capture first-token latency trends: H100 servers typically show 4–5 ms TTFT with ~45% P95 inflation under burst load, Groq LPUs maintain sub-3 ms medians with ~40% tails, and SambaNova pipelines yield 5–6 ms medians but heavier tails (+55%).
-- **HBM bandwidth.** Accelerator YAMLs now set `hbm.base`, `seq_scale`, and `max` using published sustained bandwidth numbers. NVIDIA H100 HBM3 peaks at 3.35 TB/s but sustains ~2.9 TB/s on STREAM Triad (≈0.86) and 1.9–2.4 TB/s (≈0.55–0.72) on transformer inference; we adopt `base = 0.40`, `seq_scale = 0.45`, `max = 0.82` to respect these ceilings. Groq’s GPT-J traces average ~0.35 TB/s of a 0.55 TB/s theoretical limit (≈0.64), leading to `base = 0.35`, `seq_scale = 0.30`, `max = 0.65`. SambaNova SNX systems sustain ~900 GB/s vs. 1.2 TB/s peak (≈0.75), so we use `base = 0.45`, `seq_scale = 0.35`, `max = 0.75`. All profiles retain `seq_norm = 8192`, matching the context length where attention transitions from cache-resident to fully memory-bound.
-- **Power draw.** Idle/util fractions (`idle_fraction ≈ 0.4`, `util_fraction ≈ 0.6`) follow node-level measurements showing accelerators consume ~40% of peak power at idle and scale roughly linearly with utilization across DL workloads.
-- **Noise amplitude.** Residual jitter of 2–3% (noise amplitude 0.02–0.03) matches observed variance after accounting for deterministic experiment factors in training logs and inference tail studies. Tail scaling at 0.5 keeps percentile inflation within the spread seen in production traces.
-- **Retry threshold.** Communication retries become prevalent once normalized overhead exceeds 0.28–0.32, matching NCCL retry triggers and vendor guidance for multi-node deployments; per-vendor YAMLs set thresholds within this empirical band.
+# Compare other fabrics
+for fabric in ["ethernet_10g", "ethernet_25g", "ethernet_100g", "nvlink"]:
+    bandwidth = measure_allreduce_bandwidth(fabric=fabric)
+    gamma_fabric[fabric] = fabric_measurements["infiniband"] / bandwidth
+```
 
-Following this guide ensures that the Atlas Fabric simulator reflects observed accelerator behavior, capturing both central tendencies and tail risks required for hardware/software co-optimization.
+**Expected Values**:
+- NVLink/InfiniBand: 1.0 (baseline)
+- 100G Ethernet: 1.2-1.5
+- 25G Ethernet: 2.0-3.0
+- Cloud vNIC: 2.5-4.0
 
+### 2.3 Virtualization Jitter (`gamma_jitter`)
+
+**What it measures**: Performance variability in virtualized/cloud environments.
+
+**Measurement Procedure**:
+```python
+# Run identical workload multiple times
+measurements = []
+for i in range(100):
+    runtime = benchmark_standard_workload()
+    measurements.append(runtime)
+
+# Calculate jitter metrics
+mean_runtime = np.mean(measurements)
+std_runtime = np.std(measurements)
+p95_runtime = np.percentile(measurements, 95)
+
+gamma_jitter = p95_runtime / mean_runtime
+```
+
+## 3. Latency Parameters
+
+### 3.1 Base Latency Coefficients (`lat_min`, `lat_base_coeff`)
+
+**What it measures**: Fundamental latency characteristics of the system.
+
+**Measurement Procedure**:
+```python
+# Measure minimum achievable latency
+lat_min = measure_latency(
+    batch_size=1,
+    sequence_length=1,
+    model="minimal",  # Smallest possible model
+    iterations=1000
+).min()
+
+# Measure scaling with compute
+latencies = []
+compute_rates = []
+for batch_size in [1, 2, 4, 8, 16]:
+    latency = measure_latency(batch_size=batch_size)
+    rate = measure_throughput(batch_size=batch_size)
+    latencies.append(latency)
+    compute_rates.append(rate)
+
+# Fit: latency = max(lat_min, lat_base_coeff / compute_rate)
+lat_base_coeff = fit_inverse_relationship(latencies, compute_rates)
+```
+
+### 3.2 Tail Latency Multipliers
+
+**What it measures**: How much worse tail latencies are compared to median.
+
+**Measurement Procedure**:
+```python
+# Collect large sample of latencies under load
+latencies = []
+for i in range(10000):
+    latency = measure_request_latency(
+        load_level=0.7,  # 70% of peak throughput
+        model=production_model
+    )
+    latencies.append(latency)
+
+# Calculate percentiles
+p50 = np.percentile(latencies, 50)
+p95 = np.percentile(latencies, 95)
+p99 = np.percentile(latencies, 99)
+
+tail_multipliers = {
+    "p95": p95 / p50,
+    "p99": p99 / p50
+}
+```
+
+**Production Validation**:
+- Collect actual production traces
+- Compare model predictions with observed percentiles
+- Adjust multipliers if error > 10%
+
+## 4. Power Parameters
+
+### 4.1 Node Power Consumption (`p_node_nominal`)
+
+**What it measures**: Total system power draw under load.
+
+**Measurement Procedure**:
+```python
+# Use hardware power monitoring
+power_measurements = []
+
+# Idle power
+idle_power = measure_power(
+    duration=300,  # 5 minutes
+    workload="idle"
+)
+
+# Full load power
+max_power = measure_power(
+    duration=300,
+    workload="max_flops_benchmark"
+)
+
+p_node_nominal = max_power  # Rated power
+```
+
+**Tools**:
+- IPMI/BMC power monitoring
+- External power meters (most accurate)
+- nvidia-smi / rocm-smi (GPU only)
+
+### 4.2 Power Fractions (`phi_idle`, `phi_util`)
+
+**What it measures**: How power scales with utilization.
+
+**Measurement Procedure**:
+```python
+power_curve = []
+utilizations = []
+
+for util_target in [0, 0.25, 0.5, 0.75, 1.0]:
+    # Run workload at target utilization
+    workload = create_workload(target_util=util_target)
+    power = measure_power(workload=workload)
+    
+    power_curve.append(power)
+    utilizations.append(util_target)
+
+# Fit linear model: power = p_nominal * (phi_idle + phi_util * util)
+phi_idle = power_curve[0] / p_node_nominal  # Power at 0% util
+phi_util = (power_curve[-1] - power_curve[0]) / p_node_nominal
+```
+
+**Expected Values**:
+- `phi_idle`: 0.3-0.5 (30-50% of peak at idle)
+- `phi_util`: 0.5-0.7 (additional 50-70% at full load)
+
+## 5. Optimization Impact Parameters
+
+### 5.1 CUDA Graphs Impact (`delta_rho_cuda`)
+
+**What it measures**: Utilization improvement from CUDA Graphs optimization.
+
+**Measurement Procedure**:
+```python
+# Baseline without CUDA Graphs
+baseline_util = measure_utilization(
+    cuda_graphs=False,
+    model=standard_model,
+    iterations=1000
+)
+
+# With CUDA Graphs enabled
+optimized_util = measure_utilization(
+    cuda_graphs=True,
+    model=standard_model,
+    iterations=1000
+)
+
+delta_rho_cuda = optimized_util - baseline_util
+```
+
+**Expected Improvement**: 0.05-0.15 (5-15% utilization increase)
+
+### 5.2 GPUDirect RDMA Impact (`delta_rho_gpudirect`)
+
+**What it measures**: Performance improvement from GPUDirect RDMA.
+
+**Measurement Procedure**:
+```python
+# A/B testing approach
+throughput_without = benchmark_multi_gpu(
+    gpudirect_rdma=False,
+    nodes=4,
+    gpus_per_node=8
+)
+
+throughput_with = benchmark_multi_gpu(
+    gpudirect_rdma=True,
+    nodes=4,
+    gpus_per_node=8
+)
+
+# Convert to utilization impact
+delta_rho_gpudirect = (throughput_with - throughput_without) / theoretical_max
+```
+
+## 6. Validation Procedures
+
+### 6.1 Cross-Validation
+
+Run standard benchmarks across different configurations:
+```python
+validation_suite = [
+    {"model": "gpt-3-13b", "batch": 32, "seq": 2048},
+    {"model": "llama-70b", "batch": 8, "seq": 4096},
+    {"model": "t5-11b", "batch": 64, "seq": 512}
+]
+
+for config in validation_suite:
+    measured = run_actual_benchmark(config)
+    predicted = model_predict(config, calibrated_params)
+    error = abs(measured - predicted) / measured
+    
+    assert error < 0.15, f"Error {error:.1%} exceeds 15% threshold"
+```
+
+### 6.2 Production Validation
+
+Compare model predictions with production metrics:
+1. Collect 24-hour production traces
+2. Extract p50, p95, p99 latencies
+3. Compare with model predictions
+4. Adjust parameters if systematic bias observed
+
+### 6.3 Scaling Validation
+
+Verify model accuracy across scale:
+```python
+for num_gpus in [1, 2, 4, 8, 16, 32, 64]:
+    measured = benchmark_at_scale(num_gpus)
+    predicted = model_predict(num_gpus)
+    
+    # Error should remain bounded as scale increases
+    assert relative_error(measured, predicted) < 0.20
+```
+
+## 7. Calibration Frequency
+
+**Initial Calibration**: 
+- Complete measurement suite
+- 2-3 days of dedicated testing
+- Multiple validation runs
+
+**Regular Updates**:
+- Monthly: Spot-check key parameters
+- Quarterly: Full recalibration
+- After hardware changes: Complete remeasurement
+- After software updates: Revalidate optimization impacts
+
+## 8. Automation Tools
+
+### Sample Calibration Script
+```bash
+#!/bin/bash
+# Automated calibration pipeline
+
+# Phase 1: Hardware characterization
+python calibrate_hardware.py --output hardware_params.yaml
+
+# Phase 2: Communication profiling  
+python calibrate_communication.py --output comm_params.yaml
+
+# Phase 3: Latency distribution
+python calibrate_latency.py --output latency_params.yaml
+
+# Phase 4: Power profiling
+python calibrate_power.py --output power_params.yaml
+
+# Phase 5: Validation
+python validate_model.py --params *.yaml --threshold 0.15
+
+# Generate report
+python generate_calibration_report.py
+```
+
+## 9. Common Pitfalls
+
+1. **Insufficient Warmup**: Always include warmup iterations before measurement
+2. **Thermal Throttling**: Monitor GPU temperatures and power limits
+3. **Background Processes**: Ensure exclusive access to hardware during calibration
+4. **Network Congestion**: Test communication parameters in isolation
+5. **Caching Effects**: Clear caches between measurements
+6. **Statistical Significance**: Collect enough samples (minimum 100 for latency percentiles)
+
+## 10. Parameter Confidence Intervals
+
+Document uncertainty in measured parameters:
+
+| Parameter | Typical Value | Confidence Interval | Measurement Error |
+|-----------|--------------|-------------------|------------------|
+| `B_base` | 500 tok/s | ±5% | ±2% |
+| `rho_base` | 0.55 | ±0.05 | ±3% |
+| `chi_tp` | 0.15 | ±0.03 | ±5% |
+| `lat_min` | 5ms | ±1ms | ±10% |
+| `p95_mult` | 2.5x | ±0.3x | ±8% |
+
+## Summary
+
+Accurate calibration requires:
+1. **Systematic measurement** under controlled conditions
+2. **Statistical rigor** with sufficient sample sizes
+3. **Production validation** against real workloads
+4. **Regular updates** as hardware/software evolves
+5. **Documentation** of measurement procedures and confidence intervals
+
+The semi-empirical model's accuracy depends entirely on the quality of these measurements. Invest time in proper calibration to ensure reliable performance predictions.
